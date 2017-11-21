@@ -1,0 +1,75 @@
+---
+- name: add gaspi group
+  group:
+    name: gaspi
+    state: present
+
+- name: add gaspi user and generate ssh key
+  user:
+    name: gaspi
+    group: gaspi
+    shell: "/bin/bash"
+    generate_ssh_key: yes
+    ssh_key_bits: 4096
+    ssh_key_file: ".ssh/{{ansible_hostname}}"
+
+- name: fetch ssh keys
+  fetch:
+      dest: "ssh-keys/"
+      src: "/home/gaspi/.ssh/{{ansible_hostname}}.pub"
+      fail_on_missing: yes
+      flat: yes
+
+- name: add ssh keys to authorized_keys file
+  authorized_key:
+    user: gaspi
+    state: present
+    key: "{{lookup('file', item) }}"
+  with_fileglob:
+    - "ssh-keys/*.pub"
+
+- name: install dependencies
+  apt:
+    name: "{{item}}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600 #1 hour
+  with_items:
+    - "g++"
+    - "gcc"
+    - "make"
+    - "gawk"
+      
+- block :
+  - name: create bin dir for user
+    file:
+      path: "~/bin/GPI-2"
+      state: directory
+
+  - name: clone GPI-2 repo
+    git:
+      repo: "https://github.com/cc-hpc-itwm/GPI-2.git"
+      dest: "~/GPI-2/"
+      update: yes
+      force: yes
+
+  - name: build GPI-2
+    shell: "./install.sh --with-ethernet --with-fortran=false -p ~/bin/GPI-2/"
+    args:
+      chdir: "~/GPI-2/"
+
+  - name: extend PATH in .bashrc
+    lineinfile:
+      path: "~/.bashrc"
+      line: "PATH=${PATH}:/home/gaspi/bin/GPI-2/bin/"
+  become: yes
+  become_user: gaspi
+  become_method: su
+
+- name: add ssh config
+  template:
+    dest: /home/gaspi/.ssh/config
+    src: ssh_config.j2
+    owner: gaspi
+    group: gaspi
+    mode: 0644

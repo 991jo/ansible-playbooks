@@ -1,0 +1,7 @@
+Host gpi-*
+	IdentityFile = .ssh/{{ansible_hostname}}
+
+{% for host in groups['gaspi-cluster'] %}
+Host {{host}}
+	Hostname = {{hostvars[host]['ansible_host']}}
+{%endfor%}
